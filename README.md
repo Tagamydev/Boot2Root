@@ -151,3 +151,57 @@ echo -n Iheartpwnage | sha256sum
 ## 9. Laurie Access
 
 The hashed password, and its plaintext version, were tested against users found in `/home`. It successfully authenticated as **Laurie** via SSH.
+
+
+
+
+
+## Thor 
+
+### 1. Initial Enumeration
+
+During the post-exploitation phase, the analyst navigated to a directory named `thor`. Within this folder, two files were identified:
+
+* `README`
+* `turtle`
+
+The `README` file indicated that completing the challenge would grant access to the user **zaz**.
+
+### 2. Turtle File Analysis
+
+The `turtle` file appeared to contain a set of instructions resembling a command or scripting language. Upon further investigation, the instructions were recognized as commands intended for **Turtle Graphics**—a Python-based drawing library used for educational purposes.
+
+### 3. Visualization and Message Extraction
+
+To interpret the instructions, the analyst wrote a custom script to parse the turtle commands and generate the corresponding graphic. The output of the rendered turtle script was a drawing composed of several capital letters:
+
+* Two **S** characters
+* One **A**
+* One **H**
+* One **L**
+
+Based on the drawing order and instructions, the intended sequence appeared to be:
+
+```
+SLASH
+```
+
+This string matched the context provided in the `turtle` file, which included the hint:
+
+> *"Can you digest the message? :)"*
+
+The hint implied that the extracted string should be **hashed**, similar to previous steps in the Boot2Root challenge. The SHA-256 hash was attepted, but it did not produce the correct result.
+
+After testing multiple hashing algorithms, it was determined that **MD5** was the intended method. Hashing the string `SLASH` with MD5 produced the following digest:
+
+```
+646da671ca01bb5d84dbb5fb2238dc8e
+```
+
+This hash served as the **password for user zaz**, allowing access to the next stage of the machine.
+
+### Additional Resources
+
+* [Turtle Graphics Online Interpreter](https://trinket.io/turtle)
+
+
