@@ -153,7 +153,7 @@ echo -n Iheartpwnage | sha256sum
 
 ### 1. Overview
 
-The final stage emulates the “binary bomb” exercise, requiring decompilation and reverse engineering of each phase within a provided executable. Failure to supply the correct input for any phase triggers the `explode_bomb()` function.
+This stage emulates the “binary bomb” exercise, requiring decompilation and reverse engineering of each phase within a provided executable. Failure to supply the correct input for any phase triggers the `explode_bomb()` function.
 
 ---
 
