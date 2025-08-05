@@ -148,13 +148,187 @@ echo -n Iheartpwnage | sha256sum
 # 330b845f32185747e4f8ca15d40ca59796035c89ea809fb5d30f4da83ecf45a4
 ```
 
-## 9. Laurie Access
 
-The hashed password, and its plaintext version, were tested against users found in `/home`. It successfully authenticated as **Laurie** via SSH.
+## Laurie
 
+### 1. Overview
 
+The final stage emulates the “binary bomb” exercise, requiring decompilation and reverse engineering of each phase within a provided executable. Failure to supply the correct input for any phase triggers the `explode_bomb()` function.
 
+---
 
+### Phase 1: Exact String Match
+
+```c
+void phase_1(undefined4 param_1)
+{
+  if (strings_not_equal(param_1, "Public speaking is very easy.") != 0) {
+    explode_bomb();
+  }
+}
+```
+
+* **Requirement:** Supply the exact phrase
+* **Solution:**
+
+  ```
+  Public speaking is very easy.
+  ```
+
+---
+
+### Phase 2: Factorial Sequence
+
+The function expects six integers $a_1$ through $a_6$ satisfying:
+
+$$
+\begin{aligned}
+a_1 &= 1,\\
+a_{i+1} &= (i+1)\times a_i \quad\text{for }1 \le i \le 5.
+\end{aligned}
+$$
+
+* **Computed Sequence:**
+
+  1. $a_1 = 1$
+  2. $a_2 = 2\times1 = 2$
+  3. $a_3 = 3\times2 = 6$
+  4. $a_4 = 4\times6 = 24$
+  5. $a_5 = 5\times24 = 120$
+  6. $a_6 = 6\times120 = 720$
+
+* **Solution:**
+
+  ```
+  1 2 6 24 120 720
+  ```
+
+---
+
+### Phase 3: Lookup Table Validation
+
+Phase 3 reads three tokens: an integer `n` (0–7), a character `c`, and an integer `v`. It then verifies that $(n,c,v)$ matches one of eight hard-coded triples:
+
+|  n  |  c  | Hex v | Decimal v |
+| :-: | :-: | :---: | :-------: |
+|  0  |  q  | 0x309 |    777    |
+|  1  |  b  | 0x0d6 |    214    |
+|  2  |  b  | 0x2f3 |    755    |
+|  3  |  k  | 0x0fb |    251    |
+|  4  |  o  | 0x0a0 |    160    |
+|  5  |  t  | 0x1ca |    458    |
+|  6  |  v  | 0x30c |    780    |
+|  7  |  b  | 0x20c |    524    |
+
+* **Simplest Valid Input:**
+
+  ```
+  0 q 777
+  ```
+
+* **Alternate Example (as per README hint):**
+
+  ```
+  1 b 214
+  ```
+
+---
+
+### Phase 4: Fibonacci Sequence Check
+
+The code computes a Fibonacci‐style function `func4(n)`:
+
+```c
+func4(0) = 1
+func4(1) = 1
+func4(n) = func4(n-1) + func4(n-2)  for n ≥ 2
+```
+
+It then requires `func4(n) == 0x37` (decimal 55).
+
+* **Fibonacci Values:**
+
+  ```
+  n : 0  1  2   3   4   5    6    7    8     9
+  f : 1  1  2   3   5   8   13   21   34   55
+  ```
+
+* **Solution:**
+
+  ```
+  9
+  ```
+
+---
+
+### Phase 5: 6-Character Transformation
+
+Phase 5 expects a 6-character input string. For each character, it:
+
+1. Extracts the lower 4 bits (`char & 0xF`).
+2. Uses that value as an index into a 16-byte secret array (`buffer[] = "isrveawhobpnutfg"`).
+3. Constructs a new 6-character string.
+4. Compares the result to the target `"giants"`.
+
+Any mismatch triggers `explode_bomb()`.
+
+#### Scripted Approach
+
+A helper C program can:
+
+1. Generate the output string for a given input.
+2. Test against `"giants"`.
+3. Identify candidate inputs.
+
+Once the correct mapping is found, only one 6-character string yields `"giants"`:
+
+* **Solution (phase 5 password):**
+
+  ```
+  opekmq
+  ```
+
+*(Exact input withheld to preserve challenge integrity.)*
+
+---
+
+### Phase 6: Linked-List Ordering
+
+Phase 6 reads six distinct integers (each 1–6) into an array. It then:
+
+1. Verifies each is within \[1,6] and none are duplicated.
+2. Treats each integer as a position in a linked list of six nodes.
+3. Traverses the list in the order specified by the input.
+4. Ensures the traversed values are in ascending order.
+
+By automating enumeration (e.g., via GDB scripting), the correct permutation was determined:
+
+* **Solution:**
+
+  ```
+  4 2 6 1 3 5
+  ```
+
+---
+
+**Complete Bomb-Defusal Input Sequence**
+
+Putting all phases together, the full sequence to defuse the bomb is:
+
+```
+Phase 1:  Public speaking is very easy.
+Phase 2:  1 2 6 24 120 720
+Phase 3:  0 q 777
+Phase 4:  9
+Phase 5:  opekmq
+Phase 6:  4 2 6 1 3 5
+```
+
+the password for thor is
+
+```
+Publicspeakingisveryeasy.126241207201b2149opekmq426135
+```
 
 ## Thor 
 
