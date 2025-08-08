@@ -429,65 +429,24 @@ Any mismatch triggers `explode_bomb()`.
 
 ```c
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-const char buffer[] = "isrveawhobpnutfg";
+int main() {
+    const char* index = "isrveawhobpnutfg";
+    const char* target = "giants";
 
-void validator(const char* str1, const char* str2)
-{
-    char arr[7] = {0};
+    for (char c = 'a'; c <= 'z'; c++) {
+        char mapped = index[c & 0xf]; // c & 0xf keeps the lower 4 bits
 
-    for (int i = 0; i < 6; i++)
-        arr[i] = buffer[str1[i] & 0xf];
-
-    if (strcmp(arr, str2) != 0)
-        printf("[ KO ] output: %s\n", arr);
-    else
-        printf("[ OK ] output: %s\n", arr);
-}
-
-const int* indexListGenerator(char const* str) {
-    static int list[6] = {0};
-    char* tmp;
-
-    for (int i = 0; i < 6; i++) {
-        if ((tmp = strchr(buffer, str[i])) == NULL)
-            exit(1);
-        list[i] = tmp - buffer;
+        // Check if mapped character is in "giants"
+        for (int j = 0; target[j] != '\0'; j++) {
+            if (mapped == target[j]) {
+                printf("%c : %c\n", mapped, c);
+                break;
+            }
+        }
     }
 
-    printf("list of index for '%s': [%d, %d, %d, %d, %d, %d]\n"
-        , str
-        , list[0]
-        , list[1]
-        , list[2]
-        , list[3]
-        , list[4]
-        , list[5]
-    );
-    return list;
-}
-
-const char* arrayGenerator(const int* list)
-{
-    static char arr[7] = {0};
-
-    for (int i = 0; i < 6; i++)
-        arr[i] = list[i] | 0x30;
-
-    printf("Generated array: '%s'\n", arr);
-    return arr;
-}
-
-int main(int argc, char** argv)
-{
-    if (argc != 2 || strlen(argv[1]) != 6)
-        return 1;
-
-    const int* list = indexListGenerator(argv[1]);
-    const char* arr = arrayGenerator(list);
-    validator(arr, argv[1]);
+    return 0;
 }
 ```
 
@@ -577,7 +536,25 @@ Phase 6 reads six distinct integers (each 1–6) into an array. It then:
 3. Traverses the list in the order specified by the input.
 4. Ensures the traversed values are in ascending order.
 
-By automating enumeration (e.g., via GDB scripting), the correct permutation was determined:
+By automating enumeration, the correct permutation was determined:
+
+```bash
+#!/bin/bash
+
+while IFS= read -r line; do
+    echo "Trying: $line"
+
+    # Run bomb with current line, capture output and errors
+    echo "$line" | ./bomb responses.txt > temp_output.txt 2>&1
+
+    # Check if it did NOT explode (you can tune this condition)
+    if ! grep -q "BOOM" temp_output.txt; then
+        echo "✅ Success with: $line"
+        cat temp_output.txt
+        break
+    fi
+done < numbers.txt
+```
 
 **Solution:**
 
@@ -674,7 +651,20 @@ The presence of the `E` flag indicates that the **stack is executable**, though 
 The vulnerable binary uses `strcpy()` to copy user input into a fixed-size buffer without bounds checking:
 
 ```c
-(insert Ghidra decompiled snippet)
+#include "out.h"
+
+
+bool main(int param_1,int param_2)
+
+{
+  char local_90 [140];
+  
+  if (1 < param_1) {
+    strcpy(local_90,*(char **)(param_2 + 4));
+    puts(local_90);
+  }
+  return param_1 < 2;
+}
 ```
 
 This creates a classic buffer overflow scenario.
