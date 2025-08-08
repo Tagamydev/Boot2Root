@@ -10,7 +10,7 @@ int main() {
         // Check if mapped character is in "giants"
         for (int j = 0; target[j] != '\0'; j++) {
             if (mapped == target[j]) {
-                printf("%c : %c\n", mapped, c);
+                printf("[%c] = %c\n", mapped, c);
                 break;
             }
         }
